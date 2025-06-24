@@ -1,0 +1,204 @@
+Option Explicit
+Function ShareOption(Dates, strike As Double, numstep As Integer, behav As Double, rfr1 As Double, _
+    vol As Double, dvd As Double, spot As Double, shares As Double, matdates, exdates, _
+    options, dil As Integer, exitRate1 As Double, exitRate2 As Double) As Double
+
+    Dim SP() As Double, DP() As Double, exOption() As Double 'exOption: total exercisable options at a certain time point
+    Dim Warrant() As Double
+    Dim Stepdate() As Date
+    Dim rfr As Double, dt As Double, u As Double, d As Double, p As Double, q As Double
+    Dim valdate As Date, matdate As Date, exdate As Date
+    Dim i, k As Integer
+    
+    'Initialization
+    valdate = Dates(1)
+    matdate = Dates(2)
+    exdate = Dates(3)
+    
+    rfr = Application.WorksheetFunction.Ln(1 + rfr1)
+    dt = (matdate - valdate) / 365.25 / numstep
+    u = Exp(vol * Sqr(dt))
+    d = 1 / u
+    p = (Exp((rfr - dvd) * dt) - d) / (u - d)
+    q = 1 - p
+    
+    ReDim SP(0 To numstep, 0 To numstep)
+    ReDim DP(0 To numstep, 0 To numstep)
+    ReDim exOption(0 To numstep)
+    ReDim Warrant(0 To numstep, 0 To numstep)
+    ReDim Stepdate(0 To numstep)
+    
+
+    
+    For i = 0 To numstep
+        Stepdate(i) = valdate + 365 * i * dt
+        
+        'Calculate all exercisable options for which stepdate is between the MatDate and ExDate
+        If dil = 1 Then
+            exOption(i) = 0
+            For k = 1 To 30
+                If matdates(k) >= Stepdate(i) And exdates(k) <= Stepdate(i) Then
+                    exOption(i) = exOption(i) + options(k)
+                End If
+            Next k
+        End If
+    Next i
+    
+    Call runSpotPrice(SP, DP, exOption, numstep, spot, u, d, strike, shares, dil)
+    
+    If dil = 0 Then 'no dilution
+    
+        If (behav > 0) Then
+            Call ConversionOption2(SP, SP, Warrant, Stepdate, strike, exdate, numstep, rfr, p, dt, behav, exitRate1, exitRate2) ' SP=DP
+        Else
+            Call ConversionOption(SP, Warrant, Stepdate, strike, exdate, numstep, rfr, p, dt, exitRate1, exitRate2)
+        End If
+    
+    Else  'dilution
+            
+        If (behav > 0) Then
+            Call ConversionOption2(SP, DP, Warrant, Stepdate, strike, exdate, numstep, rfr, p, dt, behav, exitRate1, exitRate2)
+            'need to use SP to determine when to exercise, and DP to calculate gain
+        Else
+            Call ConversionOption(DP, Warrant, Stepdate, strike, exdate, numstep, rfr, p, dt, exitRate1, exitRate2)
+        End If
+        
+    End If
+
+    ShareOption = Warrant(0, 0)
+    
+End Function
+
+
+
+
+
+Sub runSpotPrice(SP() As Double, DP() As Double, exOption1() As Double, numstep As Integer, spot As Double, _
+        u As Double, d As Double, strike As Double, shares As Double, dil As Integer) 'get spot prices for every node
+
+    Dim i, j As Integer
+    
+    SP(0, 0) = spot
+    
+   
+    
+    For i = 1 To numstep
+        
+        For j = 0 To i
+            SP(i, j) = SP(i - 1, j) * u
+            If dil = 1 Then
+                If strike < SP(i, j) Then
+                    DP(i, j) = (SP(i, j) * shares + strike * exOption1(i)) / (shares + exOption1(i))
+                Else
+                    DP(i, j) = SP(i, j)
+                End If
+            End If
+        Next j
+        
+        SP(i, i) = SP(i - 1, i - 1) * d
+        
+        If dil = 1 Then
+            If strike < SP(i, i) Then
+                    DP(i, i) = (SP(i, i) * shares + strike * exOption1(i)) / (shares + exOption1(i))
+                Else
+                    DP(i, i) = SP(i, i)
+            End If
+        End If
+    Next i
+    
+    
+
+End Sub
+
+'No early exercise behavior, can be used to calculate warrants
+
+Sub ConversionOption(Price() As Double, CO() As Double, Stepdate() As Date, exprice As Double, exdate As Date, _
+    n As Integer, r, p, dt, exitR1 As Double, exitR2 As Double)
+
+    Dim i, j As Integer
+    Dim comp1, comp2 As Double
+    
+    'set conversion option value in last step
+    For j = 0 To n
+        If (Price(n, j) >= exprice) Then
+            CO(n, j) = Price(n, j) - exprice
+        Else
+            CO(n, j) = 0
+        End If
+    Next j
+    
+    'roll back
+    For i = (n - 1) To 0 Step -1
+        For j = 0 To i
+            
+            If (Stepdate(i) < exdate) Then
+                comp1 = 0
+                'comp2 = Exp(-exitR1 * dt) * (p * CO(i + 1, j) + (1 - p) * CO(i + 1, j + 1)) * Exp(-r * dt)
+                'CO(i, j) = (p * CO(i + 1, j) + (1 - p) * CO(i + 1, j + 1)) * Exp(-r * dt) using normal risk-neutral binomial valuation - IFRS 2 prevents pre-vesting forfeitures incorporating into estimation of option value
+                 CO(i, j) = (1 - exitR1 * dt) * (p * CO(i + 1, j) + (1 - p) * CO(i + 1, j + 1)) * Exp(-r * dt)
+            Else
+                '% remaining * optVal + % leaving * max of (in the money optVal or 0)
+                 CO(i, j) = (1 - exitR2 * dt) * (p * CO(i + 1, j) + (1 - p) * CO(i + 1, j + 1)) * Exp(-r * dt) + (exitR2 * dt) * (WorksheetFunction.Max(Price(i, j) - exprice, 0))
+            End If
+            'Else
+            '    comp1 = Application.WorksheetFunction.Max(Price(i, j) - exprice, 0)
+            '    comp2 = Exp(-exitR2 * dt) * (p * CO(i + 1, j) + (1 - p) * CO(i + 1, j + 1)) * Exp(-r * dt)
+            'End If
+                
+            'If (comp1 > comp2) Then
+            '    CO(i, j) = comp1
+            'Else
+            '    CO(i, j) = comp2
+            'End If
+        Next j
+    Next i
+
+End Sub
+
+' With Early Exercise Behavior, can not calculate warrants
+' No comparison between intrinsic value and roll back value, ExBehav is the only exercise criteria
+
+Sub ConversionOption2(Price() As Double, DilPrice() As Double, CO() As Double, Stepdate() As Date, exprice As Double, _
+    exdate As Date, n As Integer, r, p, dt, behav As Double, exitR1 As Double, exitR2 As Double)
+
+    Dim i, j As Integer
+
+     'set conversion option value in last step
+    For j = 0 To n
+        If (DilPrice(n, j) >= exprice) Then
+            CO(n, j) = DilPrice(n, j) - exprice
+        Else
+            CO(n, j) = 0
+        End If
+    Next j
+    
+    For i = (n - 1) To 0 Step -1
+        For j = 0 To i
+            
+            If (Stepdate(i) < exdate) Then
+            
+                'CO(i, j) = Exp(-exitR1 * dt) * (p * CO(i + 1, j) + (1 - p) * CO(i + 1, j + 1)) * Exp(-r * dt)
+                'CO(i, j) = (p * CO(i + 1, j) + (1 - p) * CO(i + 1, j + 1)) * Exp(-r * dt) using normal risk-neutral binomial valuation - IFRS 2 prevents pre-vesting forfeitures incorporating into estimation of option value
+                 CO(i, j) = (1 - exitR1 * dt) * (p * CO(i + 1, j) + (1 - p) * CO(i + 1, j + 1)) * Exp(-r * dt)
+                
+            ElseIf Price(i, j) > exprice * behav Then
+            
+                 CO(i, j) = Application.WorksheetFunction.Max(DilPrice(i, j) - exprice, 0) 'post-vesting exit rate ignored?
+                
+            Else 'both exercisable (vested) and curr expr w/ behave > stock pr
+            
+                'CO(i, j) = (1 - Exp(-exitR2 * dt)) * Application.WorksheetFunction.Max(DilPrice(i, j) - exprice, 0) + _
+                 '   Exp(-exitR2 * dt) * (p * CO(i + 1, j) + (1 - p) * CO(i + 1, j + 1)) * Exp(-r * dt)
+                 
+                 '% remaining * optVal + % leaving * max of (in the money optVal or 0)
+                CO(i, j) = (1 - exitR2 * dt) * (p * CO(i + 1, j) + (1 - p) * CO(i + 1, j + 1)) * Exp(-r * dt) + (exitR2 * dt) * (WorksheetFunction.Max(DilPrice(i, j) - exprice, 0))
+            End If
+            
+        Next j
+    Next i
+
+End Sub
+
+
+
+

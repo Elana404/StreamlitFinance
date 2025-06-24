@@ -1,0 +1,89 @@
+
+Sub getValue()
+
+    Dim lot As Integer, lots As Integer, status As Integer
+    
+    
+    Dim i As Integer
+    
+    lots = Range("B12").End(xlToRight).Column - 2
+    
+
+    'clear old sheets and contents
+    Sheets("summary").Range(Range("B12").End(xlToRight).Offset(1, 1), Cells(30, 30)).ClearContents
+    
+
+    lot = Range("lot")
+
+     
+    Do Until lot = 0
+    
+        Sheets("data").Range("F1") = Range("valDate").Offset(0, lot - 1).Value
+        Sheets("data").Range("F2") = Range("matDate").Offset(0, lot - 1).Value
+        
+        If Range("steps").Offset(0, lot - 1) = "" Then
+            Range("steps").Offset(0, lot - 2).Copy Range("steps").Offset(0, lot - 1)
+        End If
+            
+        If Range("ExBhv").Offset(0, lot - 1) = "" Then
+            Range("ExBhv").Offset(0, lot - 1) = 2.2
+        End If
+    
+        With Sheets("summary")
+            .Range("RFRateS").Offset(0, lot - 1) = Sheets("data").Range("RFRate")
+            .Range("VolS").Offset(0, lot - 1) = Sheets("data").Range("Vol")
+            .Range("DVDS").Offset(0, lot - 1) = Sheets("data").Range("DVD")
+            
+            .Range("SPS").Copy .Range("SPS").Offset(0, lot - 1)
+            .Range("life").Copy .Range("life").Offset(0, lot - 1)
+            
+
+        End With
+        
+        'check if there is next lot
+        If Range("lot").Offset(0, lot) = lot + 1 Then
+            lot = Range("lot").Offset(0, lot)
+        ElseIf Range("lot").Offset(0, lot) <> "" Then
+            MsgBox ("Please Enter the Lot No. in Sequential Order.")
+            Exit Sub
+        Else
+            lot = 0
+        End If
+
+        status = lot / lots * 100
+        Application.StatusBar = status & "% Completed"
+
+    Loop
+    
+    lot = Range("lot")
+    
+    Do Until lot = 0
+        
+        Range("OpVal").Offset(0, 0).Copy Range("OpVal").Offset(0, lot - 1)
+        Range("OpVal").Offset(2, 0).Copy Range("OpVal").Offset(2, lot - 1)
+        Range("OpVal").Offset(3, 0).Copy Range("OpVal").Offset(3, lot - 1)
+        Range("OpVal").Offset(4, 0).Copy Range("OpVal").Offset(4, lot - 1)
+        Range("OpVal").Offset(6, 0).Copy Range("OpVal").Offset(6, lot - 1)
+    
+        If Range("lot").Offset(0, lot) = lot + 1 Then
+            lot = Range("lot").Offset(0, lot)
+        Else
+            lot = 0
+        End If
+    Loop
+        
+    
+
+    Application.StatusBar = False
+
+    
+    
+
+
+End Sub
+
+
+
+
+
+

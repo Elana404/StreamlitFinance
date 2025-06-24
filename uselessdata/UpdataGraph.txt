@@ -1,0 +1,43 @@
+Option Explicit
+
+Sub UpdateGraph()
+
+    Application.ScreenUpdating = False
+    
+    If Not (IsError(Sheets("data").Range("A10"))) Then
+        Sheets("data").Range("A11") = Sheets("data").Range("A10").Value
+    End If
+
+    If (IsError(Range("Reference_Row")) + IsError(Range("Valuation_Row"))) Then
+        MsgBox "Reference date and valuation date are not defind."
+        Exit Sub
+    Else
+
+        Dim SHEET As String
+        SHEET = ActiveSheet.Name
+        ActiveSheet.ChartObjects("Chart 1").Activate
+        ActiveChart.SeriesCollection(1).Values = "=" & SHEET & "!R" & Range("reference_row") & "C2:R" & Range("Valuation_Row") & "C2"
+        ActiveChart.SeriesCollection(2).Values = "=" & SHEET & "!R" & Range("reference_row") & "C4:R" & Range("Valuation_Row") & "C4"
+        ActiveChart.SeriesCollection(1).XValues = "=" & SHEET & "!R" & Range("reference_row") & "C1:R" & Range("Valuation_Row") & "C1"
+        ActiveChart.SeriesCollection(2).XValues = "=" & SHEET & "!R" & Range("reference_row") & "C1:R" & Range("Valuation_Row") & "C1"
+        
+        ActiveChart.Axes(xlCategory).MajorUnit = Round(Range("F3") / 30 / 10)
+        ActiveChart.Axes(xlCategory).MajorUnitScale = xlMonths
+    
+    
+    End If
+    
+    
+
+    
+End Sub
+
+
+Sub testing()
+
+    If Sheets("summary").Range("A73") = 1 And Sheets("summary").Range("B73") = 1 _
+        And Sheets("summary").Range("C73") = 1 Then
+        Range("A74") = 1
+    End If
+
+End Sub
